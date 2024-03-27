@@ -10,8 +10,14 @@ client = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print("logged in")
 
-@client.slash_command(guild_ids=[1217909401097080883])
+@client.slash_command(name = "test", guild_ids=[1217909401097080883])
 async def test(interaction : Interaction):
     await interaction.response.send_message("hi")
+    
+@client.slash_command(name = "test2", guild_ids=[1217909401097080883])
+async def test2(ctx, name: str,  time: int):
+    print(str(name))
+    await ctx.response.send_message(name)
+
 
 client.run(TOKEN)
