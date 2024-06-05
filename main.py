@@ -5,6 +5,8 @@ from nextcord.ext import commands
 import requests
 import pandas as pd
 from tabulate import tabulate
+from config import TOKEN, guildID
+
 # import typing
 intents = nextcord.Intents.default()
 intents.members = True
@@ -12,10 +14,8 @@ client = commands.Bot(command_prefix="!", intents=intents)
 def chunks(df, chunk_size):
     return [df[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
 # api_url = 'https://jerseyctf.ctfd.io/api/v1/challenges'
-guildID = 1217909401097080883
+
 members_task = {}
-# guildID = client.get_guild(int(id))
-id="1217909401097080883"
 
 fetched_challenges = []
 
