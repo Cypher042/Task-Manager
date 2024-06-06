@@ -5,7 +5,7 @@ from nextcord.ext import commands
 import requests
 import pandas as pd
 from tabulate import tabulate
-from config import TOKEN, guildID
+from config import TOKEN, guildID, mongostring
 from pymongo import MongoClient
 from pprint import pprint
 intents = nextcord.Intents.default()
@@ -13,10 +13,12 @@ intents.members = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-clientHu = MongoClient('mongodb+srv://root:toor1234@task-manager-cluster.fngyzsw.mongodb.net/')
+clientHu = MongoClient(mongostring)
 print(clientHu)
 db = clientHu['Task-Manager']
-challnames = db['challenge_names']
+
+
+# challnames = clientHu['Task-Manager']['challenge_names']
 
 
 
@@ -28,8 +30,27 @@ async def on_ready():
 @bot.slash_command(description="My first slash command", guild_ids=[guildID])
 async def hello(interaction: nextcord.Interaction):
     await interaction.send("Hello!")
+
+
+
+
+@bot.slash_command(name= 'archive_ctf', guild_ids=[guildID])
+async def archive_ctf(interaction: nextcord.Interaction, ctf_name: str):
+    if ctf_name in db.list_collection_names():
+        clientHu['Task-Manager'][f'{ctf_name}'].rename(ctf_name + " [Archived]", dropTarget = True)
+        await interaction.send(f"{ctf_name} has been archived sucessfully.")
+    else:
+        await interaction.send("No such CTF Exists, list to view")
+
+
+@bot.slash_command(name= 'list_all_ctfs ', guild_ids=[guildID])
+async def ctf_list(interaction: nextcord.Interaction):
+    await interaction.send('\n'.join(db.list_collection_names()))
+
 @bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
-async def fetch_challenges(interaction: nextcord.Interaction, api_url : str):
+async def fetch_challenges(interaction: nextcord.Interaction,ctf_name: str, api_url : str):
+
+
     try:
         resp = requests.get(api_url)
         if resp.status_code ==200:
@@ -38,7 +59,7 @@ async def fetch_challenges(interaction: nextcord.Interaction, api_url : str):
                 challengesinfo = resp_json['data']
                 if isinstance(challengesinfo, list):
                     challenge_names_dict = [{'name': challenge['name']} for challenge in challengesinfo]
-                challnames.insert_many(challenge_names_dict)
+                clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_names_dict)
                 await interaction.send(f"All challenges fetched successfully from {api_url}")
 
         else:
@@ -47,9 +68,9 @@ async def fetch_challenges(interaction: nextcord.Interaction, api_url : str):
             print(e)
             await interaction.send(f"Error fetching challenges: {e}")      
 @bot.slash_command(name="showflag", guild_ids=[guildID])
-async def show_flag(interaction: nextcord.Interaction, challenge_name: str):
+async def show_flag(interaction: nextcord.Interaction,ctf_name: str, challenge_name: str):
 
-    record = challnames.find_one({"name": challenge_name})
+    record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
     if record == None:
         await interaction.send("Invalid challenge name.")
         return
