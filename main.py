@@ -21,8 +21,6 @@ db = clientHu['Task-Manager']
 # challnames = clientHu['Task-Manager']['challenge_names']
 
 
-
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
@@ -30,8 +28,17 @@ async def on_ready():
 @bot.slash_command(description="My first slash command", guild_ids=[guildID])
 async def hello(interaction: nextcord.Interaction):
     await interaction.send("Hello!")
+    await interaction.send(f"{interaction.user.name}")
 
-
+@bot.slash_command(name= 'status', guild_ids=[guildID])
+async def status(interaction: nextcord.Interaction, ctf_name: str):
+    if ctf_name in db.list_collection_names():
+        q = clientHu['Task-Manager'][f"{ctf_name}"].find({"Solved by": {"$exists": True}})
+        await interaction.send(f"The status of {ctf_name} is: \n")
+        for i in q:
+            await interaction.send(f"{i['name']} : {i['Solved by']}")
+    else:
+        await interaction.send("No such CTF Exists, list to view")
 
 
 @bot.slash_command(name= 'archive_ctf', guild_ids=[guildID])
@@ -50,7 +57,6 @@ async def ctf_list(interaction: nextcord.Interaction):
 @bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
 async def fetch_challenges(interaction: nextcord.Interaction,ctf_name: str, api_url : str):
 
-
     try:
         resp = requests.get(api_url)
         if resp.status_code ==200:
@@ -59,14 +65,40 @@ async def fetch_challenges(interaction: nextcord.Interaction,ctf_name: str, api_
                 challengesinfo = resp_json['data']
                 if isinstance(challengesinfo, list):
                     challenge_names_dict = [{'name': challenge['name']} for challenge in challengesinfo]
+                
                 clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_names_dict)
+                clientHu['Task-Manager'][f'{ctf_name}'].insert_one({"num": "1", "player" : None})
+                
                 await interaction.send(f"All challenges fetched successfully from {api_url}")
 
         else:
             await interaction.send(f"Failed to fetch challenges (status code {resp.status_code})")
     except Exception as e:
             print(e)
-            await interaction.send(f"Error fetching challenges: {e}")      
+            await interaction.send(f"Error fetching challenges: {e}")
+
+@bot.slash_command(name="done", guild_ids=[guildID])
+async def done(interaction: nextcord.Interaction, ctf_name: str, challenge_name: str, flag: str):
+    
+    if ctf_name in db.list_collection_names():
+        record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
+        if record == None:
+            await interaction.send("Invalid challenge name.")
+            return
+        else:
+            post = {"flag" : f"{flag}", "Solved by": f"{interaction.user.name}"}
+            print(interaction.user.name)
+            clientHu['Task-Manager'][f'{ctf_name}'].update_one({'name': f'{challenge_name}'}, {"$set": post}, upsert=False)
+            playername = clientHu['Task-Manager'][f'{ctf_name}'].find_one({f'{interaction.user.id}': f'{interaction.user.name}'})
+            if playername == None:
+                clientHu['Task-Manager'][f'{ctf_name}'].update_one({"num": "1"}, {"$push" : {"player": f'{interaction.user.name}'}})
+            await interaction.send(f"`{challenge_name}` has been solved by <@{interaction.user.id}>")
+    else:
+        await interaction.send("No such ctf")
+
+    
+    
+
 @bot.slash_command(name="showflag", guild_ids=[guildID])
 async def show_flag(interaction: nextcord.Interaction,ctf_name: str, challenge_name: str):
 
