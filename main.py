@@ -1,10 +1,8 @@
 import nextcord 
-import math
-import asyncio
+# import math
+# import asyncio
 from nextcord.ext import commands
 import requests
-import pandas as pd
-from tabulate import tabulate
 from config import TOKEN, guildID, mongostring
 from pymongo import MongoClient
 from pprint import pprint
@@ -18,7 +16,7 @@ print(clientHu)
 db = clientHu['Task-Manager']
 
 
-# challnames = clientHu['Task-Manager']['challenge_names']
+
 
 
 @bot.event
@@ -112,5 +110,149 @@ async def show_flag(interaction: nextcord.Interaction,ctf_name: str, challenge_n
             await interaction.send(f"The flag for `{record['name']}` is `{record['flag']}`")
         else:
             await interaction.send(f"Challenge `{record['name']}` has not been completed by anyone.")
+
+# ---------------------------TASK MODULE STARTS HERE ------------------------------------------
+
+
+members_task = {}
+
+@bot.event
+async def select_task(interaction: nextcord.Interaction,assigner_id:str,user_id:str):
+    task_options=[nextcord.SelectOption(label= task ,value= task ) for task in members_task[user_id][assigner_id]]
+    async def handle_task(interaction: nextcord.Interaction):
+        task=interaction.data["values"][0]
+        await interaction.response.send_message("uploaded and pinged")
+        guild = bot.get_guild(int(id))
+        assigner=guild.get_member(int(assigner_id))
+        username=guild.get_member(int(user_id)).global_name
+        (members_task[user_id][assigner_id]).remove(task)
+        await assigner.send(username+" !task done "+task)
+        if not members_task[user_id][assigner_id]:
+            del members_task[user_id][assigner_id]
+            if not members_task[user_id]:
+                del members_task[user_id]
+    dropdown = nextcord.ui.Select(
+        placeholder="Choose task",  
+        options=task_options,
+        min_values=1,
+        max_values=1)
+    dropdown.callback=handle_task
+    view = nextcord.ui.View()
+    view.add_item(dropdown)
+    await interaction.response.send_message("Choose task:", view=view,ephemeral=True)
+
+async def dropdown_assigners_select(interaction: nextcord.Interaction,user_id:str):
+    assigner_id_options=[]
+    guild = bot.get_guild(int(id))
+    for assigner_id in members_task[user_id]:
+        assigner_id_options.append(nextcord.SelectOption(label=(guild.get_member(int(assigner_id))).global_name, value=assigner_id))
+    async def handle_assigner_id(interaction: nextcord.Interaction):
+        assigner_id=interaction.data["values"][0]
+        await select_task(interaction,assigner_id,user_id)
+        view.stop()
+    dropdown = nextcord.ui.Select(
+        placeholder="Choose assigner name",  
+        options=assigner_id_options,
+        min_values=1,
+        max_values=1)
+    dropdown.callback=handle_assigner_id
+    view = nextcord.ui.View()
+    view.add_item(dropdown)
+    await interaction.response.send_message("Choose assigner name:", view=view,ephemeral=True)
+
+@bot.slash_command(name="uploadtask", guild_ids=[guildID])
+async def uploadtask(interaction: nextcord.Interaction, task : str,role: nextcord.Role = None, member: nextcord.Member = None):
+    user=interaction.user
+    if role is None and member is None :
+        await interaction.response.send_message("Club and Members Both cannot be empty Provide one")
+        return
+    if not(role is None or member is None) :
+        await interaction.response.send_message("Provide one not both")
+        return
+    await interaction.response.send_message("Task uploaded and pinged")
+    if member is None:
+        for mem in role.members:
+            try:
+                await mem.send(user.global_name +" !task : "+task)
+                if str(mem.id) not in members_task:
+                    members_task[str(mem.id)]={str(user.id):[task]}
+                else:
+                    if str(user.id) not in members_task[str(mem.id)] :
+                        members_task[str(mem.id)]={str(user.id):[task]}
+                    elif task not in members_task[str(mem.id)][str(user.id)]:
+                        members_task[str(mem.id)][str(user.id)].append(task)
+            except : 
+                continue
+    else:
+        await member.send(interaction.user.global_name +" !task : "+task)
+        if str(member.id) not in members_task:
+            members_task[str(member.id)]={str(user.id):[task]}
+        else:
+            if str(user.id) not in members_task[str(member.id)] :
+                members_task[str(member.id)]={str(user.id):[task]}
+            elif task not in members_task[str(member.id)][str(user.id)]:
+                members_task[str(member.id)][str(user.id)].append(task)
+
+@bot.slash_command(name="taskdone", guild_ids=[guildID])
+async def taskdone(interaction: nextcord.Interaction):
+    user_id=str(interaction.user.id)
+    if user_id in members_task:
+        await dropdown_assigners_select(interaction,user_id)
+    else:
+        await interaction.response.send_message("```No Task For You```")
+
+@bot.slash_command(name="showtask", guild_ids=[guildID])
+async def showtask(interaction: nextcord.Interaction,role: nextcord.Role = None, member: nextcord.Member = None):
+    guild = bot.get_guild(int(id))
+    userid=interaction.user.id
+    if not(role is None or member is None) :
+        await interaction.response.send_message("```Provide one not both```") 
+        return
+    elif role is None and member is None:
+        if str(userid) not in members_task:
+            await interaction.response.send_message("```No Tasks for you```")
+        else:
+            message="** Tasks For You ** \n"
+            for m_id , tasks in members_task[str(userid)].items():
+                sender = (guild.get_member(int(m_id))).global_name
+                message+="By "+sender+"\n"
+                i = 1
+                for task in tasks:
+                    message+=str(i)+". "+task+"\n"
+                    i+=1
+            await interaction.response.send_message("```"+message+"```")
+    elif role is None : 
+        if str(member.id) not in members_task:
+            await interaction.response.send_message(f"```No Tasks for {member.global_name}```")
+        else :
+            message=f"** Tasks for {member.global_name} **\n"
+            for m_id , tasks in members_task[str(member.id)].items():
+                sender = (guild.get_member(int(m_id))).global_name
+                message+="By "+sender+"\n"
+                i = 1
+                for task in tasks:
+                    message+=str(i)+". "+task+"\n"
+                    i+=1
+            await interaction.response.send_message("```"+message+"```")
+    else:
+        message=""
+        for mem in role.members:
+            if mem.global_name is None:
+                continue
+            elif str(mem.id) not in members_task:
+                continue
+            else: 
+                message+=f"** Tasks for {mem.global_name} **\n"
+                for m_id , tasks in members_task[str(mem.id)].items():
+                    sender = (guild.get_member(int(m_id))).global_name
+                    message+="By "+sender+"\n"
+                    i = 1
+                    for task in tasks:
+                        message+=str(i)+". "+task+"\n"
+                        i+=1
+        if message=="":
+            message="```No Task For Anyone Enjoy```"
+        await interaction.response.send_message("```"+message+"```")
+
 
 bot.run(TOKEN)
