@@ -6,6 +6,9 @@ import requests
 from config import TOKEN, guildID, mongostring
 from pymongo import MongoClient
 from pprint import pprint
+from nextcord import SlashOption
+
+
 intents = nextcord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -16,20 +19,27 @@ print(clientHu)
 db = clientHu['Task-Manager']
 
 
+def activechalls():
+    l = []
+    for i in db.list_collection_names():
+        if not "[Archived]" in i:
+            l.append(i)
+    return l
 
 
+    
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-@bot.slash_command(description="My first slash command", guild_ids=[guildID])
-async def hello(interaction: nextcord.Interaction):
-    await interaction.send("Hello!")
-    await interaction.send(f"{interaction.user.name}")
+# @bot.slash_command(description="My first slash command", guild_ids=[guildID])
+# async def hello(interaction: nextcord.Interaction):
+#     await interaction.send("Hello!")
+#     await interaction.send(f"{interaction.user.name}")
 
 @bot.slash_command(name= 'status', guild_ids=[guildID])
-async def status(interaction: nextcord.Interaction, ctf_name: str):
+async def status(interaction: nextcord.Interaction, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
     if ctf_name in db.list_collection_names():
         q = clientHu['Task-Manager'][f"{ctf_name}"].find({"Solved by": {"$exists": True}})
         await interaction.send(f"The status of {ctf_name} is: \n")
@@ -40,7 +50,7 @@ async def status(interaction: nextcord.Interaction, ctf_name: str):
 
 
 @bot.slash_command(name= 'archive_ctf', guild_ids=[guildID])
-async def archive_ctf(interaction: nextcord.Interaction, ctf_name: str):
+async def archive_ctf(interaction: nextcord.Interaction, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
     if ctf_name in db.list_collection_names():
         clientHu['Task-Manager'][f'{ctf_name}'].rename(ctf_name + " [Archived]", dropTarget = True)
         await interaction.send(f"{ctf_name} has been archived sucessfully.")
@@ -50,7 +60,10 @@ async def archive_ctf(interaction: nextcord.Interaction, ctf_name: str):
 
 @bot.slash_command(name= 'list_all_ctfs ', guild_ids=[guildID])
 async def ctf_list(interaction: nextcord.Interaction):
-    await interaction.send('\n'.join(db.list_collection_names()))
+    embed=nextcord.Embed(title="All Ctfs")
+    embed.add_field(name= '\n'.join(db.list_collection_names()),value="---------------------", inline=False)
+    await interaction.send(embed=embed)
+    # await interaction.send("```",'\n'.join(db.list_collection_names()),"```")
 
 @bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
 async def fetch_challenges(interaction: nextcord.Interaction,ctf_name: str, api_url : str):
@@ -98,7 +111,7 @@ async def done(interaction: nextcord.Interaction, ctf_name: str, challenge_name:
     
 
 @bot.slash_command(name="showflag", guild_ids=[guildID])
-async def show_flag(interaction: nextcord.Interaction,ctf_name: str, challenge_name: str):
+async def show_flag(interaction: nextcord.Interaction,challenge_name: str, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
 
     record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
     if record == None:
@@ -122,7 +135,7 @@ async def select_task(interaction: nextcord.Interaction,assigner_id:str,user_id:
     async def handle_task(interaction: nextcord.Interaction):
         task=interaction.data["values"][0]
         await interaction.response.send_message("uploaded and pinged")
-        guild = bot.get_guild(int(id))
+        guild = bot.get_guild(guildID)
         assigner=guild.get_member(int(assigner_id))
         username=guild.get_member(int(user_id)).global_name
         (members_task[user_id][assigner_id]).remove(task)
@@ -143,7 +156,7 @@ async def select_task(interaction: nextcord.Interaction,assigner_id:str,user_id:
 
 async def dropdown_assigners_select(interaction: nextcord.Interaction,user_id:str):
     assigner_id_options=[]
-    guild = bot.get_guild(int(id))
+    guild = bot.get_guild(guildID)
     for assigner_id in members_task[user_id]:
         assigner_id_options.append(nextcord.SelectOption(label=(guild.get_member(int(assigner_id))).global_name, value=assigner_id))
     async def handle_assigner_id(interaction: nextcord.Interaction):
@@ -203,7 +216,7 @@ async def taskdone(interaction: nextcord.Interaction):
 
 @bot.slash_command(name="showtask", guild_ids=[guildID])
 async def showtask(interaction: nextcord.Interaction,role: nextcord.Role = None, member: nextcord.Member = None):
-    guild = bot.get_guild(int(id))
+    guild = bot.get_guild(guildID)
     userid=interaction.user.id
     if not(role is None or member is None) :
         await interaction.response.send_message("```Provide one not both```") 
