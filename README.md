@@ -1,6 +1,6 @@
 # Task-Manager
 
-A discord bot project for managing tasks and CTFs at Discord Server of Infosec CyberLabs IITISM.
+A discord bot for managing tasks and CTFs at Discord Server of Infosec CyberLabs IITISM.
 
 ## Installation
 
