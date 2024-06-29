@@ -16,7 +16,7 @@ perms = {"archive":["sys-admin", "root" ],
          "done":["sys-admin", "root","Club"],
          "status":["sys-admin", "root"],
          "clearchalls":["sys-admin", "root" ],
-         "showflag":["sys-admin", "root", "Club"],
+         "show_flag":["sys-admin", "root", "Club"],
          "uploadtask":["sys-admin", "root"],
          "showtask":["sys-admin", "root","Club"],
          "taskdone":["sys-admin", "root"],
@@ -47,10 +47,6 @@ def activechalls():
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-# @bot.slash_command(description="My first slash command", guild_ids=[guildID])
-# async def hello(interaction: nextcord.Interaction):
-#     await interaction.send("Hello!")
-#     await interaction.send(f"{interaction.user.name}")
 
 @bot.slash_command(name= 'status', guild_ids=[guildID])
 async def status(interaction: nextcord.Interaction, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
@@ -225,20 +221,18 @@ async def select_chall_show(interaction: nextcord.Interaction,ctf_name_selected:
     async def handle_chall_show(interaction: nextcord.Interaction):
         challenge_name=interaction.data["values"][0]
         ##yo bhai
-        record = clientHu['Task-Manager'][f'{ctf_name_selected}'].find_one({"name": challenge_name})
-        if record == None:
-            await interaction.send("Invalid challenge name.")
-            return
 
-        else:
-            if 'flag' in record:
-                embed=nextcord.Embed(title=ctf_name_selected, color=0x00ffff)
-                embed.add_field(name=record['name'], value="", inline=True)
-                embed.add_field(name=record['flag'], value="", inline=True)
-                await interaction.send(embed=embed)
-                # await interaction.send(f"The flag for `{record['name']}` is `{record['flag']}`")
-            else:
-                await interaction.send(f"Challenge `{record['name']}` has not been completed by anyone.")
+        record = clientHu["Task-Manager"][f'{ctf_name_selected}'].find_one({"name": challenge_name})
+        l = record['flags']
+        embed = nextcord.Embed(title= f"{challenge_name}", color=0x0080ff)
+        embed.set_author(name=f"Flags")
+        for i in l:
+            key = list(i.keys())[0]
+            # print(i.keys())
+            embed.add_field(name=f"{key}", value=f"{i[f'{key}']}", inline=False)
+            
+        await interaction.send(embed=embed)
+
     dropdown = nextcord.ui.Select(
         placeholder="Choose chall",  
         options=chall_options,
@@ -291,35 +285,34 @@ async def show_flag(interaction: nextcord.Interaction):
     else:
         await interaction.send("No permission for that action!")
 
-@bot.slash_command(name="showflag", guild_ids=[guildID])
-async def show_flag(interaction: nextcord.Interaction,challenge_name: str, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
+# @bot.slash_command(name="showflag", guild_ids=[guildID])
+# async def show_flag(interaction: nextcord.Interaction,challenge_name: str, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
 
-    member = interaction.guild.get_member(interaction.user.id) 
-    if any(role.name in perms["showflag"] for role in member.roles):
+#     member = interaction.guild.get_member(interaction.user.id) 
+#     if any(role.name in perms["showflag"] for role in member.roles):
             
-        record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
-        if record == None:
-            await interaction.send("Invalid challenge name.")
-            return
+#         record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
+#         if record == None:
+#             await interaction.send("Invalid challenge name.")
+#             return
 
-        else:
-            if 'flag' in record:
-                embed=nextcord.Embed(title=ctf_name, color=0x00ffff)
-                embed.add_field(name=record['name'], value="", inline=True)
-                embed.add_field(name=record['flag'], value="", inline=True)
-                await interaction.send(embed=embed)
-                # await interaction.send(f"The flag for `{record['name']}` is `{record['flag']}`")
-            else:
-                await interaction.send(f"Challenge `{record['name']}` has not been completed by anyone.")
-    else:
-        await interaction.send("No permission for that action!")
+#         else:
+#             if 'flag' in record:
+#                 embed=nextcord.Embed(title=ctf_name, color=0x00ffff)
+#                 embed.add_field(name=record['name'], value="", inline=True)
+#                 embed.add_field(name=record['flag'], value="", inline=True)
+#                 await interaction.send(embed=embed)
+#                 # await interaction.send(f"The flag for `{record['name']}` is `{record['flag']}`")
+#             else:
+#                 await interaction.send(f"Challenge `{record['name']}` has not been completed by anyone.")
+#     else:
+#         await interaction.send("No permission for that action!")
+
 
 # ---------------------------TASK MODULE STARTS HERE ------------------------------------------
 
 
 members_task = {}
-
-# @bot.event
 
 @bot.event
 async def select_chall(interaction: nextcord.Interaction,ctf_name_selected:str,category_name_selected:str,flag:str,user_id:str):
