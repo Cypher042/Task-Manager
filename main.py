@@ -1,16 +1,21 @@
 import nextcord 
-# import math
-# import asyncio
+
 from nextcord.ext import commands
 import requests
 from config import TOKEN, guildID, mongostring
 from pymongo import MongoClient
-from pprint import pprint
-from nextcord import SlashOption
-from bson import encode
+import logging as log
 
-#perms=cmd:role allowed
-perms = {"archive":["sys-admin", "root" ],
+log.basicConfig(
+    level=log.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    filename="basic.log",
+)
+
+#perms=cmd:role allowed   -------- SETUP ALL YOUR PERMS
+
+perms = {"archive_ctf":["sys-admin", "root" ],
          "list_challenges":["sys-admin", "root","Club"],
          "fetchchallenges":["sys-admin", "root"],
          "done":["sys-admin", "root","Club"],
@@ -33,37 +38,49 @@ print(clientHu)
 db = clientHu['Task-Manager']
 
 
-def activechalls():
-    l = []
-    for i in db.list_collection_names():
-        if not "[Archived]" in i:
-            l.append(i)
-    return l
-
-
-    
+   
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
+@bot.event
+async def dropdown_ctf_name_select_status(interaction: nextcord.Interaction,user_id:str):
+    ctf_names= db.list_collection_names()
+    ctf_name_options=[nextcord.SelectOption(label= ctf_name ,value= ctf_name ) for ctf_name in ctf_names]
+    async def handle_ctf_name_status(interaction: nextcord.Interaction):
+        ctf_name_selected=interaction.data["values"][0]
+        records = clientHu["Task-Manager"][f'{ctf_name_selected}'].find({'flags': {"$not": {"$size": 0}}})
 
-@bot.slash_command(name= 'status', guild_ids=[guildID])
-async def status(interaction: nextcord.Interaction, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
-    
-    
-    member = interaction.guild.get_member(interaction.user.id)
-    
+        for record in records:
+
+
+            print(record)
+            c = record[list(record.keys())[1]]
+            l = record[list(record.keys())[3]]
+            embed = nextcord.Embed(title= f"{c}", color=0x0080ff)
+            embed.set_author(name=f"Players who completed!")
+            for i in l:
+                key = list(i.keys())[0]
+                embed.add_field(name=f"{i[f'{key}']}", value="", inline=False)
+            await interaction.send(embed=embed)
+    dropdown = nextcord.ui.Select(
+        placeholder="Choose ctf name",
+        options=ctf_name_options,
+        min_values=1,
+        max_values=1)
+    dropdown.callback=handle_ctf_name_status
+    view = nextcord.ui.View()
+    view.add_item(dropdown)
+    await interaction.response.send_message("Choose ctf name:", view=view,ephemeral=True)
+@bot.slash_command(name="status", guild_ids=[guildID])
+async def statusctf(interaction: nextcord.Interaction):
+    member = interaction.guild.get_member(interaction.user.id) 
     if any(role.name in perms["status"] for role in member.roles):
-    
-        if ctf_name in db.list_collection_names():
-            q = clientHu['Task-Manager'][f"{ctf_name}"].find({"Solved by": {"$exists": True}})
-            await interaction.send(f"The status of {ctf_name} is: \n")
-            for i in q:
-                await interaction.send(f"{i['name']} : {i['Solved by']}")
-        else:
-            await interaction.send("No such CTF Exists, list to view")
+        user_id=str(interaction.user.id)
+        await dropdown_ctf_name_select_status(interaction,user_id)
     else:
+        log.warning(f"{interaction.user.name} tried to use STATUS, No Permission")
         await interaction.send("No permission for that action!")
 
 
@@ -81,10 +98,37 @@ async def dropdown_ctf_name_select_archive(interaction: nextcord.Interaction,use
             existing_channel = nextcord.utils.get(guild.channels, name=channel_name)
             if not existing_channel:
                 await guild.create_text_channel(channel_name,category=category)
+                channel = nextcord.utils.get(guild.channels, name=channel_name)
+                
                 ##idhar se tera kaam h
-                await interaction.response.send_message(f'Channel {channel_name} created successfully!')
+                try: 
+                    records = clientHu["Task-Manager"][f'{ctf_name_selected}'].find({'flags': {"$not": {"$size": 0}}})
+                    for record in records:
+                        print(record)
+                        c = record['name']
+                        l = record['flags']
+                        embed = nextcord.Embed(title= f"{c}", color=0x0080ff)
+                        embed.set_author(name=f"Flags")
+                        for i in l:
+                            key = list(i.keys())[0]
+                            embed.add_field(name=f"{key}", value=f"{i[f'{key}']}", inline=False)
+                        await channel.send(embed=embed)
+                    for i in clientHu['Task-Manager'][f'{ctf_name_selected}'].distinct('category'):
+                        print(i)
+                        uncompleted = clientHu["Task-Manager"][f'{ctf_name_selected}'].find({"$and" : [{'category': i}, {'flags':  {"$size": 0}}]})
+                        embed1=nextcord.Embed(title="Unfinished Challenges", color=0xfd0000)
+                        embed1.set_author(name=f"{i}")
+                        for record in uncompleted:
+                            challs = record['name']
+                            embed1.add_field(name=f"{challs}", value="", inline=False)
+                        await channel.send(embed = embed1)
+                except Exception as e:
+                    log.error(f"{interaction.user.name} tried to use Archive, encountered Error --> {e}")
+                    await interaction.send(f"Could not Archive CTF. Error --> {e}")                        # await interaction.response.send_message(f'Channel {channel_name} created successfully!')
+                db.drop_collection(ctf_name_selected)
             else:
-                await interaction.response.send_message(f'Channel {channel_name} already exists!', ephemeral=True)
+                log.warning(f"{interaction.user.name} tried to archive {ctf_name_selected}, {channel_name} already exists! ")
+                await interaction.response.send_message(f'Channel `{channel_name}` already exists!', ephemeral=True)
         else:
             await interaction.response.send_message('This command can only be used in a server.', ephemeral=True)
     dropdown = nextcord.ui.Select(
@@ -103,6 +147,7 @@ async def archivectf(interaction: nextcord.Interaction):
         user_id=str(interaction.user.id)
         await dropdown_ctf_name_select_archive(interaction,user_id)
     else:
+        log.warning(f"{interaction.user.name} tried to use ARCHIVE, No Permission")
         await interaction.send("No permission for that action!")
 
 @bot.slash_command(name= 'list_all_ctfs ', guild_ids=[guildID])
@@ -113,12 +158,14 @@ async def ctf_list(interaction: nextcord.Interaction):
         embed=nextcord.Embed(title="All Ctfs", color=0x00df05)
         embed.add_field(name= '\n'.join(db.list_collection_names()),value="---------------------", inline=False)
         await interaction.send(embed=embed)
-        # await interaction.send("```",'\n'.join(db.list_collection_names()),"```")
+
     else:
-        await interaction.send(f"No permission fot that action!")
+        log.warning(f"{interaction.user.name} tried to use List_all_Ctfs, No Permission")
+        await interaction.send(f"No permission for that action!")
 
 
-@bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
+
+@bot.slash_command(name="fetch_challenges", guild_ids=[guildID])
 async def fetch_challenges(interaction: nextcord.Interaction, ctf_name: str, api_url: str, api_token: str = None):
     member = interaction.guild.get_member(interaction.user.id)
     
@@ -138,22 +185,73 @@ async def fetch_challenges(interaction: nextcord.Interaction, ctf_name: str, api
                 if 'data' in resp_json:
                     challengesinfo = resp_json['data']
                     if isinstance(challengesinfo, list):
-                        challenge_names_dict = [{'name': challenge['name'], 'category': challenge['category'], 'flags': []} for challenge in challengesinfo]
-                        clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_names_dict)
-                        clientHu['Task-Manager'][f'{ctf_name}'].insert_one({"num": "1", "player": None})
+                        await interaction.send(f"Fetching challs.... from {api_url}")
+                        for challenge in challengesinfo:
+                            if not clientHu["Task-Manager"][f'{ctf_name}'].find_one({'name': challenge['name']}):
+                                challenge_data = {
+                                    'name': challenge['name'],
+                                    'category': challenge.get('category', 'Uncategorized'),
+                                    'flags': []
+                                }
+                                clientHu["Task-Manager"][f'{ctf_name}'].insert_one(challenge_data)
+                    await interaction.channel.send(f"All challenges stored from {api_url} at {ctf_name}")
+                    log.info(f"{interaction.user.name} Fetchd Challenges from {api_url}, SUCCESS")
                     
-                    await interaction.send(f"All challenges fetched successfully from {api_url}")
                 else:
                     await interaction.send(f"Response JSON does not contain 'data' field.")
+                    log.error(f"{interaction.user.name} used Fetch! : Response JSON does not contain 'data' field.")
             else:
                 await interaction.send(f"Failed to fetch challenges (status code {resp.status_code})")
 
         except Exception as e:
             print(e)
+            log.error(f"{interaction.user.name} used Fetch. Encountered -->{e}")
             await interaction.send(f"Error fetching challenges: {e}")
 
     else:
+        log.warning(f"{interaction.user.name} tried to use Fetch, No Permission")
         await interaction.send(f"No permission for that action!")
+
+
+
+#-------------------------------------------ALTERNATE FETCH COMMANDS DO NOT DELETE CAN BE USEFUL--------------------------
+
+# @bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
+# async def fetch_challenges(interaction: nextcord.Interaction, ctf_name: str, api_url: str, api_token: str = None):
+#     member = interaction.guild.get_member(interaction.user.id)
+    
+#     if any(role.name in perms["status"] for role in member.roles):
+
+#         try:
+#             headers = {}
+#             if api_token:
+#                 headers = {
+#                     'Authorization': f'Token {api_token}',
+#                     'Content-Type': 'application/json'
+#                 }
+
+#             resp = requests.get(api_url, headers=headers)
+#             if resp.status_code == 200:
+#                 resp_json = resp.json()
+#                 if 'data' in resp_json:
+#                     challengesinfo = resp_json['data']
+#                     if isinstance(challengesinfo, list):
+#                         challenge_names_dict = [{'name': challenge['name'], 'category': challenge['category'], 'flags': []} for challenge in challengesinfo]
+#                         clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_names_dict)
+#                         clientHu['Task-Manager'][f'{ctf_name}'].insert_one({"num": "1", "player": None})
+                    
+#                     await interaction.send(f"All challenges fetched successfully from {api_url}")
+#                 else:
+#                     await interaction.send(f"Response JSON does not contain 'data' field.")
+#             else:
+#                 await interaction.send(f"Failed to fetch challenges (status code {resp.status_code})")
+
+#         except Exception as e:
+#             print(e)
+#             await interaction.send(f"Error fetching challenges: {e}")
+
+#     else:
+#         await interaction.send(f"No permission for that action!")
 
 
 # @bot.slash_command(name="fetchchallenges", guild_ids=[guildID])
@@ -172,46 +270,25 @@ async def fetch_challenges(interaction: nextcord.Interaction, ctf_name: str, api
 #                         challenge_names_dict = [{'name': challenge['name'],'category': challenge['category'], 'flags' : []} for challenge in challengesinfo]
 #                         # challenge_category_dict = [{'category': challenge['category']} for challenge in challengesinfo]
 #                         # challenge_cat_dict = [{'category' : challenge['category']}]
+#                     await interaction.send(f"All challenges fetched successfully from {api_url}")
+#                     print(challenge_names_dict)
 #                     clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_names_dict)
 #                     # clientHu['Task-Manager'][f'{ctf_name}'].insert_many(challenge_category_dict)
-#                     clientHu['Task-Manager'][f'{ctf_name}'].insert_one({"num": "1", "player" : None})
-                    
-#                     await interaction.send(f"All challenges fetched successfully from {api_url}")
+#                     # clientHu['Task-Manager'][f'{ctf_name}'].insert_one({"num": "1", "player" : None})
+#                     log.info(f"{interaction.user.name} Fetchd Challenges from {api_url}, SUCCESS")
 
 #             else:
+#                 log.error(f"{interaction.user.name} used Fetch! Failed to fetch challenges (status code {resp.status_code})")
 #                 await interaction.send(f"Failed to fetch challenges (status code {resp.status_code})")
 #         except Exception as e:
 #                 print(e)
+#                 log.error(f"{e}")
 #                 await interaction.send(f"Error fetching challenges: {e}")
 #     else:
+#         log.warning(f"{interaction.user.name} tried to use Fetch, No Permission")
 #         await interaction.send(f"No permission for that action!")
 
-@bot.slash_command(name="done", guild_ids=[guildID])
-async def done(interaction: nextcord.Interaction, ctf_name: str, challenge_name: str, flag: str):
-    member = interaction.guild.get_member(interaction.user.id) 
-    if any(role.name in perms["done"] for role in member.roles):
-
-        if ctf_name in db.list_collection_names():
-            record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
-            if record == None:
-                await interaction.send("Invalid challenge name.")
-                return
-            else:
-                post = {f'{flag}': f'{interaction.user.name}'}
-                print(interaction.user.name)
-                post = encode(post)
-                clientHu['Task-Manager'][f'{ctf_name}'].update_one({'name': f'{challenge_name}'}, {"$push" : {"flags": post}}, upsert=False)
-                playername = clientHu['Task-Manager'][f'{ctf_name}'].find_one({f'{interaction.user.id}': f'{interaction.user.name}'})
-                # if playername == None:
-                # if playername == None:
-                #     clientHu['Task-Manager'][f'{ctf_name}'].update_one({"num": "1"}, })
-                await interaction.send(f"`{challenge_name}` has been solved by <@{interaction.user.id}>")
-        else:
-            await interaction.send("No such ctf")
-
-    else:
-        await interaction.send("No permission for that action!")
-    
+# -------------------------------------------------------------------------------------------------------------------------------------
 
 @bot.event
 async def select_chall_show(interaction: nextcord.Interaction,ctf_name_selected:str,category_name_selected:str,user_id:str):
@@ -231,7 +308,8 @@ async def select_chall_show(interaction: nextcord.Interaction,ctf_name_selected:
             # print(i.keys())
             embed.add_field(name=f"{key}", value=f"{i[f'{key}']}", inline=False)
             
-        await interaction.send(embed=embed)
+        await interaction.send(embed=embed, ephemeral=True)
+        log.info(f"{interaction.user.name} used show_flag for {ctf_name_selected} - {challenge_name}")
 
     dropdown = nextcord.ui.Select(
         placeholder="Choose chall",  
@@ -242,7 +320,7 @@ async def select_chall_show(interaction: nextcord.Interaction,ctf_name_selected:
     view = nextcord.ui.View()
     view.add_item(dropdown)
     await interaction.response.send_message("Choose chall:", view=view,ephemeral=True)
-
+  
 async def select_category_show(interaction: nextcord.Interaction,ctf_name_selected:str,user_id:str):
     category_names= clientHu['Task-Manager'][f'{ctf_name_selected}'].distinct('category')
     category_name_options=[nextcord.SelectOption(label= category_name ,value= category_name ) for category_name in category_names]
@@ -276,6 +354,8 @@ async def dropdown_ctf_name_select_show(interaction: nextcord.Interaction,user_i
     view = nextcord.ui.View()
     view.add_item(dropdown)
     await interaction.response.send_message("Choose ctf name:", view=view,ephemeral=True)
+
+
 @bot.slash_command(name="show_flag", guild_ids=[guildID])
 async def show_flag(interaction: nextcord.Interaction):
     member = interaction.guild.get_member(interaction.user.id) 
@@ -283,36 +363,15 @@ async def show_flag(interaction: nextcord.Interaction):
         user_id=str(interaction.user.id)
         await dropdown_ctf_name_select_show(interaction,user_id)
     else:
+        log.warning(f"{interaction.user.name} tried to use Show_Flag, No Permission")
         await interaction.send("No permission for that action!")
 
-# @bot.slash_command(name="showflag", guild_ids=[guildID])
-# async def show_flag(interaction: nextcord.Interaction,challenge_name: str, ctf_name: str = SlashOption(name = "ctfname", choices= activechalls())):
-
-#     member = interaction.guild.get_member(interaction.user.id) 
-#     if any(role.name in perms["showflag"] for role in member.roles):
-            
-#         record = clientHu['Task-Manager'][f'{ctf_name}'].find_one({"name": challenge_name})
-#         if record == None:
-#             await interaction.send("Invalid challenge name.")
-#             return
-
-#         else:
-#             if 'flag' in record:
-#                 embed=nextcord.Embed(title=ctf_name, color=0x00ffff)
-#                 embed.add_field(name=record['name'], value="", inline=True)
-#                 embed.add_field(name=record['flag'], value="", inline=True)
-#                 await interaction.send(embed=embed)
-#                 # await interaction.send(f"The flag for `{record['name']}` is `{record['flag']}`")
-#             else:
-#                 await interaction.send(f"Challenge `{record['name']}` has not been completed by anyone.")
-#     else:
-#         await interaction.send("No permission for that action!")
 
 
 # ---------------------------TASK MODULE STARTS HERE ------------------------------------------
 
 
-members_task = {}
+members_task = {}    # Hail this dict, bros handling it all
 
 @bot.event
 async def select_chall(interaction: nextcord.Interaction,ctf_name_selected:str,category_name_selected:str,flag:str,user_id:str):
@@ -321,14 +380,12 @@ async def select_chall(interaction: nextcord.Interaction,ctf_name_selected:str,c
     chall_options=[nextcord.SelectOption(label= chall ,value= chall ) for chall in challs]
     async def handle_chall(interaction: nextcord.Interaction):
         challenge_name=interaction.data["values"][0]
-        #yo bhai idhar kaam h
+
         post = {f'{flag}': f'{interaction.user.name}'}
         print(interaction.user.name)
-        # post = encode(post)
+
         clientHu['Task-Manager'][f'{ctf_name_selected}'].update_one({'name': f'{challenge_name}'}, {"$push" : {"flags": post}}, upsert=False)
-        # playername = clientHu['Task-Manager'][f'{ctf_name_selected}'].find_one({f'{interaction.user.id}': f'{interaction.user.name}'})
-        # if playername == None:    
-        #     clientHu['Task-Manager'][f'{ctf_name_selected}'].update_one({"num": "1"}, {"$push" : {"player": f'{interaction.user.name}'}})
+    
         await interaction.send(f"`{challenge_name}` has been solved by <@{interaction.user.id}>")
         
     dropdown = nextcord.ui.Select(
@@ -382,6 +439,7 @@ async def submit_flag(interaction: nextcord.Interaction, flag : str):
         user_id=str(interaction.user.id)
         await dropdown_ctf_name_select(interaction,flag,user_id)
     else:
+        log.warning(f"{interaction.user.name} tried to use Submit Flag, No Permission")
         await interaction.send("No permission for that action!")
 
 @bot.event
@@ -463,7 +521,10 @@ async def uploadtask(interaction: nextcord.Interaction, task : str,role: nextcor
                 elif task not in members_task[str(member.id)][str(user.id)]:
                     members_task[str(member.id)][str(user.id)].append(task)
     else:
+        log.warning(f"{interaction.user.name} tried to use Upload Task, No Permission")
         await interaction.send("No permission for that action!")
+
+
 @bot.slash_command(name="taskdone", guild_ids=[guildID])
 async def taskdone(interaction: nextcord.Interaction):
     member = interaction.guild.get_member(interaction.user.id) 
@@ -532,6 +593,7 @@ async def showtask(interaction: nextcord.Interaction,role: nextcord.Role = None,
                 message="```No Task For Anyone Enjoy```"
             await interaction.response.send_message("```"+message+"```")
     else:
+        log.warning(f"{interaction.user.name} tried to use ShowTask, No Permission")
         await interaction.send("No permission for that action")        
 
 
