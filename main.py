@@ -1,10 +1,20 @@
 import nextcord 
-
 from nextcord.ext import commands
+import os
+from dotenv import load_dotenv
 import requests
-from config import TOKEN, guildID, mongostring
+# from config import TOKEN, guildID, mongostring
 from pymongo import MongoClient
 import logging as log
+from perms import perms
+
+
+load_dotenv()
+
+TOKEN = os.getenv('TOKEN')
+guildID = int(os.getenv('guildID'))
+mongostring = os.getenv('mongostring')
+
 
 log.basicConfig(
     level=log.INFO,
@@ -13,18 +23,7 @@ log.basicConfig(
     filename="basic.log",
 )
 
-#perms=cmd:role allowed   -------- SETUP ALL YOUR PERMS
 
-perms = {"archive_ctf":["sys-admin", "root" ],
-         "list_challenges":["sys-admin", "root","Club"],
-         "fetchchallenges":["sys-admin", "root"],
-         "done":["sys-admin", "root","Club"],
-         "status":["sys-admin", "root"],
-         "show_flag":["sys-admin", "root", "Club"],
-         "uploadtask":["sys-admin", "root"],
-         "showtask":["sys-admin", "root","Club"],
-         "taskdone":["sys-admin", "root"],
-         "submit_flag": ["sys-admin", "root"]}
 
 
 intents = nextcord.Intents.default()
@@ -98,8 +97,8 @@ async def dropdown_ctf_name_select_archive(interaction: nextcord.Interaction,use
             if not existing_channel:
                 await guild.create_text_channel(channel_name,category=category)
                 channel = nextcord.utils.get(guild.channels, name=channel_name)
-                
-                ##idhar se tera kaam h
+
+                await interaction.send("ARCHIVING ......")
                 try: 
                     records = clientHu["Task-Manager"][f'{ctf_name_selected}'].find({'flags': {"$not": {"$size": 0}}})
                     for record in records:
@@ -121,6 +120,7 @@ async def dropdown_ctf_name_select_archive(interaction: nextcord.Interaction,use
                             challs = record['name']
                             embed1.add_field(name=f"{challs}", value="", inline=False)
                         await channel.send(embed = embed1)
+                    await interaction.channel.send(f"All challenges archived in `{channel_name}`")
                 except Exception as e:
                     log.error(f"{interaction.user.name} tried to use Archive, encountered Error --> {e}")
                     await interaction.send(f"Could not Archive CTF. Error --> {e}")                        # await interaction.response.send_message(f'Channel {channel_name} created successfully!')
@@ -318,7 +318,7 @@ async def select_chall_show(interaction: nextcord.Interaction,ctf_name_selected:
     dropdown.callback=handle_chall_show
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose chall:", view=view,ephemeral=True)
+    await interaction.response.edit_message(content="Choose chall:", view=view)
   
 async def select_category_show(interaction: nextcord.Interaction,ctf_name_selected:str,user_id:str):
     category_names= clientHu['Task-Manager'][f'{ctf_name_selected}'].distinct('category')
@@ -335,7 +335,7 @@ async def select_category_show(interaction: nextcord.Interaction,ctf_name_select
     dropdown.callback=handle_category_name_show
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose category name:", view=view,ephemeral=True)
+    await interaction.response.edit_message(content="Choose category name:", view=view)
 
 async def dropdown_ctf_name_select_show(interaction: nextcord.Interaction,user_id:str):
     ctf_names= db.list_collection_names()
@@ -395,7 +395,7 @@ async def select_chall(interaction: nextcord.Interaction,ctf_name_selected:str,c
     dropdown.callback=handle_chall
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose chall:", view=view,ephemeral=True)
+    await interaction.response.edit_message(content="Choose chall:", view=view)
 
 async def select_category(interaction: nextcord.Interaction,ctf_name_selected:str,flag:str,user_id:str):
     category_names= clientHu['Task-Manager'][f'{ctf_name_selected}'].distinct('category')
@@ -412,7 +412,7 @@ async def select_category(interaction: nextcord.Interaction,ctf_name_selected:st
     dropdown.callback=handle_category_name
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose category name:", view=view,ephemeral=True)
+    await interaction.response.edit_message(content="Choose category name:", view=view)
 
 async def dropdown_ctf_name_select(interaction: nextcord.Interaction,flag:str,user_id:str):
     ctf_names= db.list_collection_names()
@@ -465,7 +465,7 @@ async def select_task(interaction: nextcord.Interaction,assigner_id:str,user_id:
     dropdown.callback=handle_task
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose task:", view=view,ephemeral=True)
+    await interaction.response.edit_message(content="Choose task:", view=view)
 
 async def dropdown_assigners_select(interaction: nextcord.Interaction,user_id:str):
     assigner_id_options=[]
@@ -484,7 +484,7 @@ async def dropdown_assigners_select(interaction: nextcord.Interaction,user_id:st
     dropdown.callback=handle_assigner_id
     view = nextcord.ui.View()
     view.add_item(dropdown)
-    await interaction.response.send_message("Choose assigner name:", view=view,ephemeral=True)
+    await interaction.response.send_message("Choose assigner name:", view=view, ephemeral= True)
 
 @bot.slash_command(name="uploadtask", guild_ids=[guildID])
 async def uploadtask(interaction: nextcord.Interaction, task : str,role: nextcord.Role = None, member: nextcord.Member = None):
@@ -540,8 +540,8 @@ async def taskdone(interaction: nextcord.Interaction):
         
 @bot.slash_command(name="showtask", guild_ids=[guildID])
 async def showtask(interaction: nextcord.Interaction,role: nextcord.Role = None, member: nextcord.Member = None):
-    member = interaction.guild.get_member(interaction.user.id) 
-    if any(role.name in perms["showtask"] for role in member.roles):    
+    member1 = interaction.guild.get_member(interaction.user.id) 
+    if any(role.name in perms["showtask"] for role in member1.roles):    
         guild = bot.get_guild(guildID)
         userid=interaction.user.id
         if not(role is None or member is None) :
