@@ -20,7 +20,6 @@ perms = {"archive_ctf":["sys-admin", "root" ],
          "fetchchallenges":["sys-admin", "root"],
          "done":["sys-admin", "root","Club"],
          "status":["sys-admin", "root"],
-         "clearchalls":["sys-admin", "root" ],
          "show_flag":["sys-admin", "root", "Club"],
          "uploadtask":["sys-admin", "root"],
          "showtask":["sys-admin", "root","Club"],
@@ -431,6 +430,7 @@ async def dropdown_ctf_name_select(interaction: nextcord.Interaction,flag:str,us
     view = nextcord.ui.View()
     view.add_item(dropdown)
     await interaction.response.send_message("Choose ctf name:", view=view,ephemeral=True)
+
 @bot.slash_command(name="submit_flag", guild_ids=[guildID])
 async def submit_flag(interaction: nextcord.Interaction, flag : str):
     
