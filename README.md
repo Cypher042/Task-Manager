@@ -11,8 +11,8 @@ Modify `.env`
 - Replace the bot TOKEN
 - Replace the mongostring.
 
-`cd Task-Manger`
-`sudo docker compose up`
+To run the bot
+```sudo docker compose up```
 
 ## Collaborators
 
