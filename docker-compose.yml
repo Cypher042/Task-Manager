@@ -1,0 +1,16 @@
+services:
+  eris:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: Eris
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    environment:
+      - TOKEN=${TOKEN}
+      - mongostring=${mongostring}
+      - guildID=${guildID}
+    env_file:
+      - .env
+  
